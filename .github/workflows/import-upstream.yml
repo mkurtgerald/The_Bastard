@@ -2,8 +2,6 @@ name: Import upstream baseline
 
 on:
   push:
-    paths:
-      - '.github/workflows/import-upstream.yml'
   workflow_dispatch:
 
 permissions:
