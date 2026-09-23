@@ -33,8 +33,13 @@ jobs:
           p.write_text(s)
           PY
 
+          rm -rf /tmp/upstream/.github/workflows
+          cp .github/workflows/import-upstream.yml /tmp/import-upstream.yml
+
           find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
           cp -a /tmp/upstream/. .
+          mkdir -p .github/workflows
+          cp /tmp/import-upstream.yml .github/workflows/import-upstream.yml
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
