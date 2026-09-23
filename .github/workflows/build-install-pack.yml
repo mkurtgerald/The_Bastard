@@ -1,0 +1,37 @@
+name: Build Windows Test Install Pack
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'INSTALL.cmd'
+      - 'installer/**'
+      - '.github/workflows/build-install-pack.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build install pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/The_Bastard_Install_Pack
+          rsync -a --exclude '.git' --exclude 'dist' ./ dist/The_Bastard_Install_Pack/
+          cd dist
+          zip -r -9 The_Bastard_Windows_Test_Pack.zip The_Bastard_Install_Pack
+          sha256sum The_Bastard_Windows_Test_Pack.zip > The_Bastard_Windows_Test_Pack.sha256
+
+      - name: Upload install pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: The_Bastard_Windows_Test_Pack
+          path: |
+            dist/The_Bastard_Windows_Test_Pack.zip
+            dist/The_Bastard_Windows_Test_Pack.sha256
+          retention-days: 30
