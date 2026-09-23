@@ -1,0 +1,45 @@
+name: Complete tracked baseline import
+
+on:
+  push:
+    paths:
+      - '.github/workflows/complete-baseline-import.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  complete:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout destination
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Force-add tracked upstream files omitted by ignore rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch master https://github.com/SharpAI/DeepCamera.git /tmp/upstream
+
+          git -C /tmp/upstream ls-files | sort > /tmp/upstream-files.txt
+          git ls-files | sort > /tmp/dest-files.txt
+          comm -23 /tmp/upstream-files.txt /tmp/dest-files.txt > /tmp/missing-files.txt
+
+          while IFS= read -r path; do
+            [ -z "$path" ] && continue
+            mkdir -p "$(dirname "$path")"
+            cp -a "/tmp/upstream/$path" "$path"
+            git add -f -- "$path"
+          done < /tmp/missing-files.txt
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --cached --quiet; then
+            echo "No missing tracked files."
+            exit 0
+          fi
+          git commit -m "Complete upstream donor baseline file inventory"
+          git push origin HEAD:main
