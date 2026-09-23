@@ -24,6 +24,15 @@ jobs:
           UPSTREAM_SHA="$(git -C /tmp/upstream rev-parse HEAD)"
           rm -rf /tmp/upstream/.git
 
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('/tmp/upstream/src/camera/src/tools/translateLanguageFile.js')
+          s = p.read_text()
+          s = re.sub(r"trnsl\.[A-Za-z0-9.]+", "REDACTED_YANDEX_KEY", s)
+          p.write_text(s)
+          PY
+
           find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
           cp -a /tmp/upstream/. .
 
