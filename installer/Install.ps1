@@ -1,9 +1,9 @@
 $ErrorActionPreference = "Stop"
 
 $SourceRoot = Split-Path -Parent $PSScriptRoot
-$InstallRoot = Join-Path $env:LOCALAPPDATA "TheBastard"
+$InstallRoot = Join-Path $env:LOCALAPPDATA "VMSTest"
 $Desktop = [Environment]::GetFolderPath("Desktop")
-$ShortcutPath = Join-Path $Desktop "The Bastard Console.lnk"
+$ShortcutPath = Join-Path $Desktop "VMS Test.lnk"
 
 function Resolve-Docker {
     $cmd = Get-Command docker -ErrorAction SilentlyContinue
@@ -28,7 +28,7 @@ function Resolve-Docker {
 }
 
 Write-Host ""
-Write-Host "The Bastard - Baseline Test Installer"
+Write-Host "VMS Test - Installer"
 Write-Host "====================================="
 Write-Host ""
 
@@ -82,11 +82,11 @@ $WshShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
 $Shortcut.TargetPath = $Launcher
 $Shortcut.WorkingDirectory = $InstallRoot
-$Shortcut.Description = "The Bastard baseline test console"
+$Shortcut.Description = "VMS Test"
 $Shortcut.Save()
 
 Write-Host ""
 Write-Host "Installed successfully."
-Write-Host "Desktop shortcut created: The Bastard Console"
+Write-Host "Desktop shortcut created: VMS Test"
 Write-Host ""
 Write-Host "No camera is configured automatically and no camera credentials are stored by this installer."
