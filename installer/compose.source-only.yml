@@ -1,0 +1,17 @@
+services:
+  detector:
+    build:
+      context: ../src/yolov7_person_detector/src
+      dockerfile: Dockerfile
+    image: the-bastard/person-detector:local
+    container_name: the-bastard-detector
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "5901:5901"
+      - "8000:8080"
+    environment:
+      TELEGRAM_TOKEN: ""
+      RUN_XTERM: "no"
+    volumes:
+      - ./runtime/detector-config:/app/.config
