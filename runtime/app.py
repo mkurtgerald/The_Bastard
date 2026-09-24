@@ -1,9 +1,13 @@
 from flask import Flask, Response, request, jsonify, render_template_string
-import cv2, threading, time
+import cv2, threading, time, os, sys, webbrowser
 from YOLOv7 import YOLOv7
 
+def resource_path(relative):
+    base = getattr(sys, "_MEIPASS", os.path.abspath(os.path.dirname(__file__)))
+    return os.path.join(base, relative)
+
 app = Flask(__name__)
-model = YOLOv7("models/yolov7-tiny_480x640.onnx", conf_thres=0.55, iou_thres=0.5)
+model = YOLOv7(resource_path("models/yolov7-tiny_480x640.onnx"), conf_thres=0.55, iou_thres=0.5)
 lock = threading.Lock()
 camera_url = None
 latest_jpeg = None
@@ -111,4 +115,6 @@ def health():
     return jsonify({"ok": True})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, threaded=True)
+    if os.environ.get("VMS_TEST_NO_BROWSER") != "1":
+        threading.Timer(1.5, lambda: webbrowser.open("http://127.0.0.1:8765")).start()
+    app.run(host="127.0.0.1", port=8765, threaded=True, use_reloader=False)
