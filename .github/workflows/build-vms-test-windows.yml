@@ -1,0 +1,93 @@
+name: Build VMS Test Windows Pack
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'runtime/**'
+      - 'src/yolov7_person_detector/src/YOLOv7/**'
+      - 'src/yolov7_person_detector/src/models/yolov7-tiny_480x640.onnx'
+      - '.github/workflows/build-vms-test-windows.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r runtime/requirements.txt
+
+      - name: Build standalone executable
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --name "VMS-Test" --add-data "src/yolov7_person_detector/src/YOLOv7;YOLOv7" --add-data "src/yolov7_person_detector/src/models/yolov7-tiny_480x640.onnx;models" --collect-all onnxruntime --collect-all cv2 runtime/app.py
+
+      - name: Smoke test executable
+        shell: pwsh
+        run: |
+          $env:VMS_TEST_NO_BROWSER="1"
+          $p = Start-Process -FilePath ".\dist\VMS-Test.exe" -PassThru
+          try {
+            $ok = $false
+            for ($i=0; $i -lt 40; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $r = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 2
+                if ($r.ok -eq $true) { $ok = $true; break }
+              } catch {}
+            }
+            if (-not $ok) { throw "VMS Test executable failed health check" }
+          } finally {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Assemble install pack
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path pack | Out-Null
+          Copy-Item ".\dist\VMS-Test.exe" ".\pack\VMS-Test.exe"
+          Copy-Item ".\LICENSE" ".\pack\LICENSE.txt"
+          $install = @(
+            '@echo off',
+            'setlocal',
+            'set "DEST=%LOCALAPPDATA%\VMSTest"',
+            'if not exist "%DEST%" mkdir "%DEST%"',
+            'copy /Y "%~dp0VMS-Test.exe" "%DEST%\VMS-Test.exe" >nul',
+            'powershell -NoProfile -ExecutionPolicy Bypass -Command "$w=New-Object -ComObject WScript.Shell; $s=$w.CreateShortcut([IO.Path]::Combine([Environment]::GetFolderPath(''''Desktop''''),''''VMS Test.lnk'''')); $s.TargetPath=[IO.Path]::Combine($env:LOCALAPPDATA,''''VMSTest'''',''''VMS-Test.exe''''); $s.WorkingDirectory=[IO.Path]::Combine($env:LOCALAPPDATA,''''VMSTest''''); $s.Save()"',
+            'start "" "%DEST%\VMS-Test.exe"',
+            'exit /b 0'
+          )
+          $install | Set-Content -Encoding ASCII ".\pack\INSTALL.cmd"
+          $readme = @(
+            'VMS TEST - WINDOWS TEST PACK',
+            '',
+            '1. Extract this ZIP.',
+            '2. Double-click INSTALL.cmd.',
+            '3. VMS Test installs to %LOCALAPPDATA%\VMSTest.',
+            '4. A VMS Test shortcut is created on the desktop.',
+            '5. The app opens locally at http://127.0.0.1:8765.',
+            '6. Paste an RTSP camera URL and click Connect.',
+            '',
+            'Live processing only. Camera video is not recorded or persisted.',
+            'No Docker, Python, SharpAI/Aegis installer, or separate runtime is required.'
+          )
+          $readme | Set-Content -Encoding ASCII ".\pack\README-FIRST.txt"
+          Compress-Archive -Path ".\pack\*" -DestinationPath ".\VMS_Test_Windows_Pack.zip" -Force
+          (Get-FileHash ".\VMS_Test_Windows_Pack.zip" -Algorithm SHA256).Hash | Set-Content ".\VMS_Test_Windows_Pack.sha256"
+
+      - name: Upload verified Windows pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: VMS_Test_Windows_Pack
+          path: |
+            VMS_Test_Windows_Pack.zip
+            VMS_Test_Windows_Pack.sha256
+          retention-days: 30
