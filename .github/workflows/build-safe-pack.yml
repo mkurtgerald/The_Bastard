@@ -31,25 +31,25 @@ jobs:
           cp LICENSE dist/The_Bastard_Source_Only/LICENSE
           cp INSTALL.cmd dist/The_Bastard_Source_Only/INSTALL.cmd
 
-          cat > dist/The_Bastard_Source_Only/README-FIRST.txt <<'EOF'
-THE BASTARD - SOURCE ONLY TEST PACK
-
-This package does NOT use the SharpAI/Aegis website download.
-It does NOT use the prebuilt shareai detector image.
-
-Requirements:
-- Windows 10/11
-- Docker Desktop installed and running
-
-Steps:
-1. Extract this ZIP.
-2. Double-click INSTALL.cmd.
-3. Open The Bastard Console from the desktop.
-4. Choose "Build detector locally from source".
-5. Choose "Start detector".
-
-The detector container is built from the source included in this package.
-EOF
+          printf '%s\n' \
+            'THE BASTARD - SOURCE ONLY TEST PACK' \
+            '' \
+            'This package does NOT use the SharpAI/Aegis website download.' \
+            'It does NOT use the prebuilt shareai detector image.' \
+            '' \
+            'Requirements:' \
+            '- Windows 10/11' \
+            '- Docker Desktop installed and running' \
+            '' \
+            'Steps:' \
+            '1. Extract this ZIP.' \
+            '2. Double-click INSTALL.cmd.' \
+            '3. Open The Bastard Console from the desktop.' \
+            '4. Choose Build detector locally from source.' \
+            '5. Choose Start detector.' \
+            '' \
+            'The detector container is built from the source included in this package.' \
+            > dist/The_Bastard_Source_Only/README-FIRST.txt
 
           cd dist
           zip -r -9 The_Bastard_Source_Only_Windows.zip The_Bastard_Source_Only
