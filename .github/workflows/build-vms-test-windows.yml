@@ -28,7 +28,7 @@ jobs:
       - name: Build standalone executable
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --onefile --name "VMS-Test" --add-data "src/yolov7_person_detector/src/YOLOv7;YOLOv7" --add-data "src/yolov7_person_detector/src/models/yolov7-tiny_480x640.onnx;models" --collect-all onnxruntime --collect-all cv2 runtime/app.py
+          pyinstaller --noconfirm --clean --onefile --name "VMS-Test" --add-data "src/yolov7_person_detector/src/YOLOv7;YOLOv7" --add-data "src/yolov7_person_detector/src/models/yolov7-tiny_480x640.onnx;models" --add-data "screenshots/aegis-benchmark-demo.mp4;demo" --collect-all onnxruntime --collect-all cv2 runtime/app.py
 
       - name: Smoke test executable
         shell: pwsh
