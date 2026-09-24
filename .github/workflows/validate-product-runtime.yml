@@ -17,18 +17,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build runtime
-        run: docker build -f runtime/Dockerfile -t the-bastard/runtime:test .
+        run: docker build -f runtime/Dockerfile -t vms-test/runtime:test .
       - name: Smoke test health
         shell: bash
         run: |
-          docker run -d --rm --name tbtest -p 8765:8080 the-bastard/runtime:test
+          docker run -d --rm --name vmstest -p 8765:8765 -e VMS_TEST_NO_BROWSER=1 vms-test/runtime:test
           for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:8765/health | grep -q '"ok":true'; then
-              docker stop tbtest
+            if curl -fsS http://127.0.0.1:8765/health | grep -q '"'"'"ok"'"':true'; then
+              docker stop vmstest
               exit 0
             fi
             sleep 1
           done
-          docker logs tbtest || true
-          docker stop tbtest || true
+          docker logs vmstest || true
+          docker stop vmstest || true
           exit 1
