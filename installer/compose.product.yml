@@ -1,8 +1,8 @@
 services:
   app:
     build:
-      context: ../runtime
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: runtime/Dockerfile
     image: the-bastard/runtime:local
     container_name: the-bastard-runtime
     restart: unless-stopped
