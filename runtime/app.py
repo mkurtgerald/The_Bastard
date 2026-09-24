@@ -16,7 +16,7 @@ PAGE = r"""
 <html>
 <head>
 <meta charset="utf-8">
-<title>The Bastard - Live Test</title>
+<title>VMS Test</title>
 <style>
 body{font-family:Arial;background:#111;color:#eee;margin:0;padding:24px}
 .wrap{max-width:1100px;margin:auto}
@@ -29,7 +29,7 @@ img{max-width:100%;border-radius:10px;background:#000}
 </style>
 </head>
 <body><div class="wrap">
-<h1>The Bastard — Live Test Runtime</h1>
+<h1>VMS Test</h1>
 <div class="card">
 <form method="post" action="/camera">
 <input name="url" placeholder="rtsp://user:pass@camera/..." required>
