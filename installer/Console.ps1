@@ -1,21 +1,57 @@
 $ErrorActionPreference = "Continue"
 $Root = Split-Path -Parent $PSScriptRoot
 $Compose = Join-Path $Root "installer\compose.source-only.yml"
+$script:DockerExe = $null
+
+function Resolve-Docker {
+    $cmd = Get-Command docker -ErrorAction SilentlyContinue
+    if ($cmd) {
+        $script:DockerExe = $cmd.Source
+        return $true
+    }
+
+    $candidates = @(
+        "C:\Program Files\Docker\Docker\resources\bin\docker.exe",
+        (Join-Path $env:LOCALAPPDATA "Docker\resources\bin\docker.exe")
+    )
+
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path $candidate)) {
+            $script:DockerExe = $candidate
+            $dir = Split-Path -Parent $candidate
+            if ($env:Path -notlike "*$dir*") {
+                $env:Path = "$dir;$env:Path"
+            }
+            return $true
+        }
+    }
+    return $false
+}
 
 function Test-Docker {
-    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    if (-not (Resolve-Docker)) {
         Write-Host ""
-        Write-Host "Docker is not installed or not on PATH."
-        Write-Host "Install Docker Desktop from Docker's official distribution, start it, then retry."
+        Write-Host "Docker CLI was not found in PATH or the normal Docker Desktop locations."
         return $false
     }
-    docker version *> $null
+
+    & $script:DockerExe version *> $null
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
         Write-Host "Docker Desktop is installed but its engine is not running."
+        $DesktopExe = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+        if (Test-Path $DesktopExe) {
+            Write-Host "Starting Docker Desktop..."
+            Start-Process $DesktopExe
+        }
         return $false
     }
     return $true
+}
+
+function Docker-Compose {
+    param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+    & $script:DockerExe compose @Args
 }
 
 function Build-Detector {
@@ -25,7 +61,7 @@ function Build-Detector {
         Write-Host ""
         Write-Host "Building detector locally from repository source."
         Write-Host "No SharpAI/Aegis installer or shareai detector image is used."
-        docker compose -f $Compose build --pull detector
+        Docker-Compose -f $Compose build --pull detector
         if ($LASTEXITCODE -ne 0) { throw "Local source build failed." }
         Write-Host ""
         Write-Host "Local source build completed."
@@ -40,7 +76,7 @@ function Start-Detector {
     if (-not (Test-Docker)) { return }
     Push-Location $Root
     try {
-        docker compose -f $Compose up -d detector
+        Docker-Compose -f $Compose up -d detector
         if ($LASTEXITCODE -ne 0) { throw "Detector failed to start." }
         Write-Host ""
         Write-Host "Detector started."
@@ -56,7 +92,7 @@ function Start-Detector {
 function Stop-Detector {
     if (-not (Test-Docker)) { return }
     Push-Location $Root
-    docker compose -f $Compose down
+    Docker-Compose -f $Compose down
     Pop-Location
 }
 
@@ -82,9 +118,10 @@ do {
         "1" {
             Write-Host ""
             if (Test-Docker) {
-                docker --version
-                docker compose version
+                & $script:DockerExe --version
+                & $script:DockerExe compose version
                 Write-Host "Docker: OK"
+                Write-Host "Docker executable: $script:DockerExe"
             }
             Write-Host "Repository install root: $Root"
             Read-Host "Press Enter"
@@ -103,7 +140,9 @@ do {
         }
         "5" { Start-Process "http://localhost:8000" }
         "6" {
-            docker ps --filter "name=the-bastard"
+            if (Test-Docker) {
+                & $script:DockerExe ps --filter "name=the-bastard"
+            }
             Read-Host "Press Enter"
         }
     }
