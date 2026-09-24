@@ -1,0 +1,10 @@
+services:
+  app:
+    build:
+      context: ../runtime
+      dockerfile: Dockerfile
+    image: the-bastard/runtime:local
+    container_name: the-bastard-runtime
+    restart: unless-stopped
+    ports:
+      - "8765:8080"
