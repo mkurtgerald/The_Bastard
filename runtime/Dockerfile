@@ -15,5 +15,5 @@ COPY src/yolov7_person_detector/src/YOLOv7 ./YOLOv7
 COPY src/yolov7_person_detector/src/models ./models
 COPY runtime/app.py .
 
-EXPOSE 8080
+EXPOSE 8765
 CMD ["python","app.py"]
