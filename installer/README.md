@@ -1,30 +1,17 @@
-# The Bastard — Windows Baseline Test Pack
+# Source-only Windows test path
 
-This package is a test wrapper around the imported baseline.
+This path intentionally does **not** use the SharpAI Aegis desktop download and does not pull the prebuilt `shareai/yolov7_person_detector` image.
 
-## Install
+The detector container is built locally from:
 
-1. Install and start Docker Desktop.
-2. Extract this ZIP.
-3. Double-click `INSTALL.cmd`.
-4. Launch **The Bastard Console** from the desktop shortcut.
+`src/yolov7_person_detector/src/Dockerfile`
 
-The installer copies the package to:
+## Windows test
 
-`%LOCALAPPDATA%\TheBastard`
+1. Install and start Docker Desktop from Docker's official distribution.
+2. Run `INSTALL.cmd`.
+3. Launch **The Bastard Console**.
+4. Select **Build detector locally from source**.
+5. Select **Start detector**.
 
-## Test modes
-
-The console currently exposes:
-- Person detector
-- Person ReID stack
-- Docker/system health
-- Detector UI
-- Home Assistant UI
-- Start/stop controls
-
-No camera is configured automatically. Camera credentials are not requested or persisted by the installer.
-
-## Notes
-
-This is a baseline test package, not a final commercial installer. The imported donor stack still pulls some legacy container images at runtime. Model and third-party licensing/provenance must be cleared before commercial distribution.
+The first local build downloads ordinary OS/Python build dependencies from their upstream package repositories, but the application code and model already come from this repository.
