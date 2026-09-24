@@ -1,0 +1,20 @@
+name: Validate Source-Only Windows Path
+
+on:
+  push:
+    paths:
+      - 'src/yolov7_person_detector/src/**'
+      - 'installer/compose.source-only.yml'
+      - '.github/workflows/validate-source-only.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-detector:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build detector from repository source
+        run: docker build -t the-bastard/person-detector:test src/yolov7_person_detector/src
