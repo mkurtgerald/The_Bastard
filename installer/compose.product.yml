@@ -3,8 +3,8 @@ services:
     build:
       context: ..
       dockerfile: runtime/Dockerfile
-    image: the-bastard/runtime:local
-    container_name: the-bastard-runtime
+    image: vms-test/runtime:local
+    container_name: vms-test-runtime
     restart: unless-stopped
     ports:
-      - "8765:8080"
+      - "8765:8765"
