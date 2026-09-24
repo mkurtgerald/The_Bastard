@@ -1,0 +1,34 @@
+name: Validate Product Runtime
+
+on:
+  push:
+    paths:
+      - 'runtime/**'
+      - 'installer/compose.product.yml'
+      - '.github/workflows/validate-product-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build runtime
+        run: docker build -t the-bastard/runtime:test runtime
+      - name: Smoke test health
+        shell: bash
+        run: |
+          docker run -d --rm --name tbtest -p 8765:8080 the-bastard/runtime:test
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8765/health | grep -q '"ok":true'; then
+              docker stop tbtest
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs tbtest || true
+          docker stop tbtest || true
+          exit 1
