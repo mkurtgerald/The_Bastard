@@ -8,12 +8,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY requirements.txt .
+COPY runtime/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY YOLOv7 ./YOLOv7
-COPY models ./models
-COPY app.py .
+COPY src/yolov7_person_detector/src/YOLOv7 ./YOLOv7
+COPY src/yolov7_person_detector/src/models ./models
+COPY runtime/app.py .
 
 EXPOSE 8080
 CMD ["python","app.py"]
