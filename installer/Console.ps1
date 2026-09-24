@@ -1,43 +1,51 @@
 $ErrorActionPreference = "Continue"
 $Root = Split-Path -Parent $PSScriptRoot
+$Compose = Join-Path $Root "installer\compose.source-only.yml"
 
-function Ensure-Docker {
+function Test-Docker {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        Write-Host ""
         Write-Host "Docker is not installed or not on PATH."
+        Write-Host "Install Docker Desktop from Docker's official distribution, start it, then retry."
         return $false
     }
     docker version *> $null
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Docker Desktop is installed but the engine is not running."
+        Write-Host ""
+        Write-Host "Docker Desktop is installed but its engine is not running."
         return $false
     }
     return $true
 }
 
-function Ensure-Env([string]$Dir) {
-    $EnvFile = Join-Path $Dir ".env"
-    if (-not (Test-Path $EnvFile)) {
-        $Offset = [int]([TimeZoneInfo]::Local.GetUtcOffset((Get-Date)).TotalHours)
-        @(
-            "TIMEZONE_OFFSET=$Offset"
-            "DOCKER_VOLUME_DIRECTORY=."
-        ) | Set-Content -Path $EnvFile -Encoding ASCII
+function Build-Detector {
+    if (-not (Test-Docker)) { return }
+    Push-Location $Root
+    try {
+        Write-Host ""
+        Write-Host "Building detector locally from repository source."
+        Write-Host "No SharpAI/Aegis installer or shareai detector image is used."
+        docker compose -f $Compose build --pull detector
+        if ($LASTEXITCODE -ne 0) { throw "Local source build failed." }
+        Write-Host ""
+        Write-Host "Local source build completed."
+    } catch {
+        Write-Host "Build failed: $($_.Exception.Message)"
+    } finally {
+        Pop-Location
     }
 }
 
-function Start-Stack([string]$Dir, [string]$Compose) {
-    if (-not (Ensure-Docker)) { return }
-    Ensure-Env $Dir
-    Push-Location $Dir
+function Start-Detector {
+    if (-not (Test-Docker)) { return }
+    Push-Location $Root
     try {
-        docker compose -f $Compose pull
-        if ($LASTEXITCODE -ne 0) { throw "Docker image pull failed." }
-        docker compose -f $Compose up -d
-        if ($LASTEXITCODE -ne 0) { throw "Docker compose start failed." }
+        docker compose -f $Compose up -d detector
+        if ($LASTEXITCODE -ne 0) { throw "Detector failed to start." }
         Write-Host ""
-        Write-Host "Stack started."
-        Write-Host "Home Assistant: http://localhost:8123"
-        Write-Host "Detector UI:    http://localhost:8000"
+        Write-Host "Detector started."
+        Write-Host "API: http://localhost:3000"
+        Write-Host "noVNC: http://localhost:8000"
     } catch {
         Write-Host "Start failed: $($_.Exception.Message)"
     } finally {
@@ -45,32 +53,27 @@ function Start-Stack([string]$Dir, [string]$Compose) {
     }
 }
 
-function Stop-Stacks {
-    $targets = @(
-        @{Dir=(Join-Path $Root "src\yolov7_person_detector"); Compose="docker-compose-x86.yml"},
-        @{Dir=(Join-Path $Root "src\yolov7_reid"); Compose="docker-compose-x86.yml"}
-    )
-    foreach ($t in $targets) {
-        if (Test-Path (Join-Path $t.Dir $t.Compose)) {
-            Push-Location $t.Dir
-            docker compose -f $t.Compose down 2>$null
-            Pop-Location
-        }
-    }
+function Stop-Detector {
+    if (-not (Test-Docker)) { return }
+    Push-Location $Root
+    docker compose -f $Compose down
+    Pop-Location
 }
 
 do {
     Clear-Host
-    Write-Host "THE BASTARD - BASELINE TEST CONSOLE"
-    Write-Host "===================================="
+    Write-Host "THE BASTARD - SOURCE-ONLY TEST CONSOLE"
+    Write-Host "======================================"
+    Write-Host ""
+    Write-Host "This test lane does NOT use the SharpAI/Aegis website installer."
+    Write-Host "The detector image is built locally from the source in this repository."
     Write-Host ""
     Write-Host "1. System check"
-    Write-Host "2. Start person detector"
-    Write-Host "3. Start person ReID stack"
-    Write-Host "4. Stop test stacks"
+    Write-Host "2. Build detector locally from source"
+    Write-Host "3. Start detector"
+    Write-Host "4. Stop detector"
     Write-Host "5. Open detector UI"
-    Write-Host "6. Open Home Assistant"
-    Write-Host "7. Show running containers"
+    Write-Host "6. Show container status"
     Write-Host "0. Exit"
     Write-Host ""
     $choice = Read-Host "Select"
@@ -78,32 +81,29 @@ do {
     switch ($choice) {
         "1" {
             Write-Host ""
-            if (Ensure-Docker) {
-                Write-Host "Docker: OK"
+            if (Test-Docker) {
                 docker --version
                 docker compose version
+                Write-Host "Docker: OK"
             }
-            Write-Host "Install root: $Root"
-            Write-Host ""
+            Write-Host "Repository install root: $Root"
             Read-Host "Press Enter"
         }
         "2" {
-            Start-Stack (Join-Path $Root "src\yolov7_person_detector") "docker-compose-x86.yml"
+            Build-Detector
             Read-Host "Press Enter"
         }
         "3" {
-            Start-Stack (Join-Path $Root "src\yolov7_reid") "docker-compose-x86.yml"
+            Start-Detector
             Read-Host "Press Enter"
         }
         "4" {
-            Stop-Stacks
-            Write-Host "Stacks stopped."
+            Stop-Detector
             Read-Host "Press Enter"
         }
         "5" { Start-Process "http://localhost:8000" }
-        "6" { Start-Process "http://localhost:8123" }
-        "7" {
-            docker ps
+        "6" {
+            docker ps --filter "name=the-bastard"
             Read-Host "Press Enter"
         }
     }
