@@ -98,8 +98,8 @@ function Stop-Detector {
 
 do {
     Clear-Host
-    Write-Host "THE BASTARD - SOURCE-ONLY TEST CONSOLE"
-    Write-Host "======================================"
+    Write-Host "VMS TEST"
+    Write-Host "========"
     Write-Host ""
     Write-Host "This test lane does NOT use the SharpAI/Aegis website installer."
     Write-Host "The detector image is built locally from the source in this repository."
