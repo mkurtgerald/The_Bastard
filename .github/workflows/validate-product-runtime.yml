@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build runtime
-        run: docker build -t the-bastard/runtime:test runtime
+        run: docker build -f runtime/Dockerfile -t the-bastard/runtime:test .
       - name: Smoke test health
         shell: bash
         run: |
