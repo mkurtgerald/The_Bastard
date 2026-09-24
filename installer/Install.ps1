@@ -5,22 +5,57 @@ $InstallRoot = Join-Path $env:LOCALAPPDATA "TheBastard"
 $Desktop = [Environment]::GetFolderPath("Desktop")
 $ShortcutPath = Join-Path $Desktop "The Bastard Console.lnk"
 
+function Resolve-Docker {
+    $cmd = Get-Command docker -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+
+    $candidates = @(
+        "C:\Program Files\Docker\Docker\resources\bin\docker.exe",
+        "C:\Program Files\Docker\Docker\resources\bin\com.docker.cli.exe",
+        (Join-Path $env:LOCALAPPDATA "Docker\resources\bin\docker.exe")
+    )
+
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path $candidate)) {
+            $dir = Split-Path -Parent $candidate
+            if ($env:Path -notlike "*$dir*") {
+                $env:Path = "$dir;$env:Path"
+            }
+            return $candidate
+        }
+    }
+    return $null
+}
+
 Write-Host ""
 Write-Host "The Bastard - Baseline Test Installer"
 Write-Host "====================================="
 Write-Host ""
 
-if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    Write-Warning "Docker was not found on PATH."
-    Write-Host "Install Docker Desktop, start it, then run INSTALL.cmd again."
+$DockerExe = Resolve-Docker
+if (-not $DockerExe) {
+    Write-Warning "Docker CLI was not found."
+    Write-Host "Checked PATH and the normal Docker Desktop install locations."
+    Write-Host "If Docker Desktop is already installed, restart Windows once and rerun INSTALL.cmd."
+    Write-Host "If it is not installed, install Docker Desktop from Docker's official distribution first."
     exit 2
 }
 
+Write-Host "Docker CLI found: $DockerExe"
+
 try {
-    docker version | Out-Null
+    & $DockerExe version | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Docker engine unavailable" }
 } catch {
-    Write-Warning "Docker is installed but the Docker engine is not responding."
-    Write-Host "Start Docker Desktop, then run INSTALL.cmd again."
+    $DesktopExe = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+    if (Test-Path $DesktopExe) {
+        Write-Host "Docker Desktop is installed but the engine is not responding."
+        Write-Host "Starting Docker Desktop..."
+        Start-Process $DesktopExe
+    } else {
+        Write-Warning "Docker CLI exists but the Docker engine is not responding."
+    }
+    Write-Host "Once Docker Desktop shows Engine running, rerun INSTALL.cmd."
     exit 3
 }
 
