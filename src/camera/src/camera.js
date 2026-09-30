@@ -77,6 +77,7 @@ location.config = process.env.SHINOBI_CONFIG_FILE || __dirname+'/conf.json'
 location.languages = __dirname+'/languages'
 location.definitions = __dirname+'/definitions'
 var config = require(location.config);
+var watchDirectory = config.nativeEvaluation ? require('./tools/native-watch') : fs.watch;
 // Preserve upstream motion imports outside the generated-fixture evaluation.
 if(!config.nativeEvaluation){P2P=require('pipe2pam');PamDiff=require('pam-diff')}
 function isEvaluationRequestAllowed(req){
@@ -1974,7 +1975,7 @@ s.camera=function(x,e,cn,tx){
             }
             if(x==='record'||(x==='start'&&e.details.detector_record_method==='sip')){
                 if(s.group[e.ke].mon[e.id].fswatch && typeof s.group[e.ke].mon[e.id].fswatch.close === 'function'){s.group[e.ke].mon[e.id].fswatch.close()}
-                s.group[e.ke].mon[e.id].fswatch=fs.watch(e.dir,{encoding:'utf8'},function(eventType,filename){
+                s.group[e.ke].mon[e.id].fswatch=watchDirectory(e.dir,{encoding:'utf8'},function(eventType,filename){
                     if(s.group[e.ke].mon[e.id].fixingVideos[filename]){return}
                     switch(eventType){
                         case'change':
@@ -2019,7 +2020,7 @@ s.camera=function(x,e,cn,tx){
                 case'start':
                     switch(e.details.stream_type){
                         case'jpeg':case'hls':
-                            s.group[e.ke].mon[e.id].fswatchStream=fs.watch(e.sdir,{encoding:'utf8'},function(eventType,filename){
+                            s.group[e.ke].mon[e.id].fswatchStream=watchDirectory(e.sdir,{encoding:'utf8'},function(eventType,filename){
                                 switch(eventType){
                                     case'change':
                                         if(s.platform!=='darwin'){

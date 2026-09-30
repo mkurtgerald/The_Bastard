@@ -72,6 +72,8 @@ jobs:
         shell: pwsh
         run: |
           $pack = Join-Path $env:BASTARD_INSTALLED 'native-evaluation'
+          & "$pack/vendor/node.exe" --test "$pack/test/watch-directory.test.js"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed watcher path regression failed' }
           & "$pack/vendor/node.exe" "$pack/smoke.js"
           if ($LASTEXITCODE -ne 0) { throw 'Bundled Windows smoke failed' }
       - name: Install Chromium for repository browser acceptance
