@@ -246,4 +246,5 @@ def health():
 if __name__=="__main__":
     if os.environ.get("VMS_TEST_NO_BROWSER")!="1":
         threading.Timer(1.2,lambda:webbrowser.open("http://127.0.0.1:8765")).start()
-    app.run(host="127.0.0.1",port=8765,threaded=True,use_reloader=False)
+    bind_host=os.environ.get("VMS_TEST_BIND","127.0.0.1")
+    app.run(host=bind_host,port=8765,threaded=True,use_reloader=False)
