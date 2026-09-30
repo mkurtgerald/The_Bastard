@@ -88,7 +88,9 @@ if(config.nativeEvaluation){
     app.use(function(req,res,next){
         if(!isEvaluationRequestAllowed(req))return res.status(403).send('Local same-origin request required');
         res.setHeader('Content-Security-Policy',"default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:*; frame-ancestors 'none'");
-        res.setHeader('Referrer-Policy','no-referrer');
+        // Native form POSTs under no-referrer send Origin: null and fail the guard above.
+        // Preserve the same-origin login while still withholding referrers from other origins.
+        res.setHeader('Referrer-Policy','same-origin');
         var evaluationPath;try{evaluationPath=decodeURIComponent(req.path)}catch(err){return res.status(400).send('Invalid path')}
         if(/^\/(super|admin)\/?$/i.test(evaluationPath) || /\/(update|configureMonitor|register|probe|motion|fileBin)(\/|$)/i.test(evaluationPath) || /\/(delete|fix|status)(\/|$)/i.test(evaluationPath))return res.status(403).send('Generated-fixture evaluation only; this operation is unavailable');
         next();

@@ -7,10 +7,14 @@ test.beforeAll(async()=>{data=fs.mkdtempSync(path.join(os.tmpdir(),'Bastard UI e
 test.afterAll(async()=>{if(instance)await instance.stop();if(data)fs.rmSync(data,{recursive:true,force:true});});
 test('original login, two live monitors, playback and interrupted navigation',async({page},testInfo)=>{
  const faults=[];page.on('pageerror',error=>faults.push(error.message));
- await page.goto(instance.url);
+ const loginPage=await page.goto(instance.url);
+ expect(loginPage.status()).toBe(200);
+ expect(loginPage.headers()['referrer-policy']).toBe('same-origin');
  await expect(page.locator('#email')).toHaveValue('');await expect(page.locator('#pass')).toHaveValue('');
  await page.locator('#email').fill(credentials.mail);await page.locator('#pass').fill(credentials.password);
- await Promise.all([page.waitForNavigation(),page.locator('#login-submit').click()]);
+ const [signedIn]=await Promise.all([page.waitForNavigation(),page.locator('#login-submit').click()]);
+ expect(await signedIn.request().headerValue('origin')).toBe(instance.url);
+ expect(signedIn.status()).toBe(200);
  await expect(page.locator('#main_header')).toBeVisible();
  for(const mid of ['fixture1','fixture2']){
   const tile=page.locator(`.monitor_block[mid="${mid}"]`);await expect(tile).toBeVisible({timeout:30000});
