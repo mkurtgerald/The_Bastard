@@ -36,9 +36,27 @@ var bodyParser = require('body-parser');
 var CircularJSON = require('circular-json');
 var ejs = require('ejs');
 var io = new (require('socket.io'))();
-var execSync = require('child_process').execSync;
 var exec = require('child_process').exec;
-var spawn = require('child_process').spawn;
+// Track only children owned by this camera process. Never kill by executable name.
+var nativeSpawn = require('child_process').spawn;
+var ownedChildren = new Set();
+var spawn = function(command,args,options){
+    if(config && config.nativeEvaluation)options=Object.assign({},options,{detached:false,windowsHide:true});
+    var child = nativeSpawn(command,args,options);
+    ownedChildren.add(child);
+    if(config && config.nativeEvaluation && process.send)process.send({type:'owned-process-started',pid:child.pid});
+    child.once('close',function(){ownedChildren.delete(child);if(config && config.nativeEvaluation && process.connected)process.send({type:'owned-process-exited',pid:child.pid})});
+    return child;
+};
+var nativeExecFile = require('child_process').execFile;
+var execFile = function(){
+    var child = nativeExecFile.apply(null,arguments);
+    ownedChildren.add(child);
+    if(config && config.nativeEvaluation && process.send)process.send({type:'owned-process-started',pid:child.pid});
+    child.once('close',function(){ownedChildren.delete(child);if(config && config.nativeEvaluation && process.connected)process.send({type:'owned-process-exited',pid:child.pid})});
+    return child;
+};
+var execFileSync = require('child_process').execFileSync;
 var socketIOclient = require('socket.io-client');
 var crypto = require('crypto');
 var webdav = require("webdav");
@@ -48,18 +66,34 @@ var events = require('events');
 var Cam = require('onvif').Cam;
 var knex = require('knex');
 var Mp4Frag = require('mp4frag');
-const P2P = require('pipe2pam');
-const PamDiff = require('pam-diff');
+var P2P, PamDiff;
 var location = {}
 
 var IMAGE_DIR = process.env.NODE_ENV || '/opt/nvr/detector/images';
 var ON_DEBUG = false;
 
-location.super = __dirname+'/super.json'
-location.config = __dirname+'/conf.json'
+location.super = process.env.SHINOBI_SUPER_FILE || __dirname+'/super.json'
+location.config = process.env.SHINOBI_CONFIG_FILE || __dirname+'/conf.json'
 location.languages = __dirname+'/languages'
 location.definitions = __dirname+'/definitions'
 var config = require(location.config);
+// Preserve upstream motion imports outside the generated-fixture evaluation.
+if(!config.nativeEvaluation){P2P=require('pipe2pam');PamDiff=require('pam-diff')}
+function isEvaluationRequestAllowed(req){
+    var hosts=['127.0.0.1:'+config.port,'localhost:'+config.port];
+    return hosts.indexOf(req.headers.host)>-1 && (!req.headers.origin || hosts.some(function(host){return req.headers.origin==='http://'+host})) && req.headers['sec-fetch-site']!=='cross-site';
+}
+if(config.nativeEvaluation){
+    app.use(function(req,res,next){
+        if(!isEvaluationRequestAllowed(req))return res.status(403).send('Local same-origin request required');
+        res.setHeader('Content-Security-Policy',"default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:*; frame-ancestors 'none'");
+        res.setHeader('Referrer-Policy','no-referrer');
+        var evaluationPath;try{evaluationPath=decodeURIComponent(req.path)}catch(err){return res.status(400).send('Invalid path')}
+        if(/^\/(super|admin)\/?$/i.test(evaluationPath) || /\/(update|configureMonitor|register|probe|motion|fileBin)(\/|$)/i.test(evaluationPath) || /\/(delete|fix|status)(\/|$)/i.test(evaluationPath))return res.status(403).send('Generated-fixture evaluation only; this operation is unavailable');
+        next();
+    });
+}
+
 if(!config.productType){
     config.productType='CE'
 }
@@ -199,18 +233,35 @@ if(databaseOptions.client === 'mysql'){
         },true);
     },true);
 }
-//kill any ffmpeg running
+// Stop only child processes that this instance created.
 s.ffmpegKill=function(){
-    var cmd=''
-    if(s.isWin===true){
-        cmd="Taskkill /IM ffmpeg.exe /F"
-    }else{
-        cmd="ps aux | grep -ie ffmpeg | awk '{print $2}' | xargs kill -9"
-    }
-    exec(cmd,{detached: true})
+    ownedChildren.forEach(function(child){
+        if(child.exitCode === null && child.signalCode === null){
+            try { child.kill('SIGTERM') } catch(err) {}
+        }
+    });
 };
-process.on('exit',s.ffmpegKill.bind(null,{cleanup:true}));
-process.on('SIGINT',s.ffmpegKill.bind(null, {exit:true}));
+process.on('exit',s.ffmpegKill);
+var shutdownStarted = false;
+s.shutdown=function(){
+    if(shutdownStarted)return;
+    shutdownStarted = true;
+    Object.keys(s.group || {}).forEach(function(ke){
+        Object.keys(s.group[ke].mon || {}).forEach(function(mid){
+            var monitor = s.group[ke].mon[mid];
+            monitor.started = 0;
+            if(monitor.spawn && monitor.spawn.stdin){
+                try { monitor.spawn.stdin.write('q\n') } catch(err) {}
+            }
+        });
+    });
+    server.close();
+    setTimeout(function(){s.ffmpegKill();process.exit(0)},1500);
+};
+process.on('SIGINT',s.shutdown);
+process.on('SIGTERM',s.shutdown);
+process.on('message',function(message){if(message === 'shutdown')s.shutdown()});
+process.on('disconnect',s.shutdown);
 //key for child servers
 s.child_nodes={};
 s.child_key='3123asdasdf1dtj1hjk23sdfaasd12asdasddfdbtnkkfgvesra3asdsd3123afdsfqw345';
@@ -413,7 +464,7 @@ s.kill=function(x,e,p){
                     x.stdin.setEncoding('utf8');x.stdin.write('q');
                 }catch(er){}
             }
-            setTimeout(function(){exec('kill -9 '+p,{detached: true})},1000)
+            setTimeout(function(){if(x.exitCode===null && x.signalCode===null){try{x.kill('SIGKILL')}catch(err){}}},1000)
         }
     }
 }
@@ -463,8 +514,8 @@ if(config.ssl&&config.ssl.key&&config.ssl.cert){
 server.listen(config.port,config.bindip,function(){
     console.log(lang.Shinobi+' - PORT : '+config.port);
 });
-io.attach(server);
-console.log('NODE.JS version : '+execSync("node -v"))
+io.attach(server,config.nativeEvaluation ? {maxHttpBufferSize:1048576,allowRequest:function(req,callback){callback(null,isEvaluationRequestAllowed(req))}} : {});
+console.log('NODE.JS version : '+process.version)
 //ffmpeg location
 if(!config.ffmpegDir){
     if(ffmpegPath !== false){
@@ -477,7 +528,7 @@ if(!config.ffmpegDir){
         }
     }
 }
-s.ffmpegVersion=execSync(config.ffmpegDir+" -version").toString().split('Copyright')[0].replace('ffmpeg version','').trim()
+s.ffmpegVersion=execFileSync(config.ffmpegDir,['-version']).toString().split('Copyright')[0].replace('ffmpeg version','').trim()
 console.log('FFMPEG version : '+s.ffmpegVersion)
 if(s.ffmpegVersion.indexOf(': 2.')>-1){
     s.systemLog('FFMPEG is too old : '+s.ffmpegVersion+', Needed : 3.2+',err)
@@ -1644,13 +1695,20 @@ s.file=function(x,e){
         break;
         case'delete':
             if(!e){return false;}
-            return exec('rm -f '+e,{detached: true});
+            return fs.rm(e,{force:true},function(err){if(err)s.systemLog('File removal failed',err.message)});
         break;
         case'delete_folder':
             if(!e){return false;}
-            return exec('rm -rf '+e,{detached: true});
+            // Existing caller uses a trailing wildcard to empty a stream directory.
+            var directory = e.endsWith('*') ? e.slice(0,-1) : e;
+            if(e.endsWith('*')){
+                fs.readdirSync(directory).forEach(function(name){fs.rmSync(path.join(directory,name),{recursive:true,force:true})});
+                return;
+            }
+            return fs.rm(directory,{recursive:true,force:true},function(err){if(err)s.systemLog('Directory removal failed',err.message)});
         break;
         case'delete_files':
+            if(config.nativeEvaluation)return; // No unverified retention deletion in evaluation.
             if(!e.age_type){e.age_type='min'};if(!e.age){e.age='1'};
             exec('find '+e.path+' -type f -c'+e.age_type+' +'+e.age+' -exec rm -f {} +',{detached: true});
         break;
@@ -2753,6 +2811,7 @@ io.on('connection', function (cn) {
 var tx;
     //set "client" detector plugin event function
     cn.on('ocv',function(d){
+        if(config.nativeEvaluation)return;
         if(!cn.pluginEngine&&d.f==='init'){
             if(config.pluginKeys[d.plug]===d.pluginKey){
                 s.pluginInitiatorSuccess("client",d,cn)
@@ -2946,12 +3005,22 @@ var tx;
     })
     //main socket control functions
     cn.on('f',function(d){
+        if(config.nativeEvaluation){
+            var allowed=['init','monitor'];
+            if(!d || allowed.indexOf(d.f)===-1)return;
+            if(d.f!=='init'){
+                if(!cn.nativeDashboardAuthenticated || !cn.ke || !cn.auth || !s.group[cn.ke] || !s.group[cn.ke].users || !s.group[cn.ke].users[cn.auth])return;
+                if(d.ke && d.ke!==cn.ke)return;
+                d.ke=cn.ke;
+            }
+            if(d.f==='monitor' && ['get','watch_on','watch_off','jpeg_on','jpeg_off'].indexOf(d.ff)===-1)return;
+        }
         if(!cn.ke&&d.f==='init'){//socket login
             cn.ip=cn.request.connection.remoteAddress;
             tx=function(z){if(!z.ke){z.ke=cn.ke;};cn.emit('f',z);}
             d.failed=function(){tx({ok:false,msg:'Not Authorized',token_used:d.auth,ke:d.ke});cn.disconnect();}
             d.success=function(r){
-                r=r[0];cn.join('GRP_'+d.ke);cn.join('CPU');
+                r=r[0];cn.nativeDashboardAuthenticated=true;cn.join('GRP_'+d.ke);cn.join('CPU');
                 cn.ke=d.ke,
                 cn.uid=d.uid,
                 cn.auth=d.auth;
@@ -3372,23 +3441,19 @@ var tx;
                     if(s.group[cn.ke].users[cn.auth]){
                         switch(d.ff){
                             case'stop':
-                                exec('kill -9 '+s.group[cn.ke].users[cn.auth].ffprobe.pid,{detatched: true})
+                                var probe=s.group[cn.ke].users[cn.auth].ffprobe;
+                                if(probe && typeof probe.kill==='function' && probe.exitCode===null)probe.kill();
                             break;
                             default:
                                 if(s.group[cn.ke].users[cn.auth].ffprobe){
                                     return
                                 }
-                                s.group[cn.ke].users[cn.auth].ffprobe=1;
                                 tx({f:'ffprobe_start'})
-                                exec('ffprobe '+('-v quiet -print_format json -show_format -show_streams '+d.query),function(err,data){
+                                s.group[cn.ke].users[cn.auth].ffprobe=execFile(config.ffprobeDir || 'ffprobe',['-v','quiet','-print_format','json','-show_format','-show_streams',d.query],{timeout:30000},function(err,data){
                                     tx({f:'ffprobe_data',data:data.toString('utf8')})
                                     delete(s.group[cn.ke].users[cn.auth].ffprobe)
                                     tx({f:'ffprobe_stop'})
                                 })
-                                //auto kill in 30 seconds
-                                setTimeout(function(){
-                                    exec('kill -9 '+d.pid,{detached: true})
-                                },30000)
                             break;
                         }
                     }
@@ -3497,6 +3562,7 @@ var tx;
     });
     //functions for retrieving cron announcements
     cn.on('cron',function(d){
+        if(config.nativeEvaluation)return;
         if(d.f==='init'){
             if(config.cron.key){
                 if(config.cron.key===d.cronKey){
@@ -3534,6 +3600,7 @@ var tx;
     })
     // admin page socket functions
     cn.on('super',function(d){
+        if(config.nativeEvaluation){cn.disconnect();return;}
         if(!cn.init&&d.f=='init'){
             d.ok=s.superAuth({mail:d.mail,pass:d.pass},function(data){
                 cn.uid=d.mail
@@ -3673,6 +3740,7 @@ var tx;
     })
     // admin page socket functions
     cn.on('a',function(d){
+        if(config.nativeEvaluation)return;
         if(!cn.init&&d.f=='init'){
             s.sqlQuery('SELECT * FROM Users WHERE auth=? AND uid=?',[d.auth,d.uid],function(err,r){
                 if(r&&r[0]){
@@ -3721,6 +3789,7 @@ var tx;
     })
     //functions for webcam recorder
     cn.on('r',function(d){
+        if(config.nativeEvaluation)return;
         if(!cn.ke&&d.f==='init'){
             s.sqlQuery('SELECT ke,uid,auth,mail,details FROM Users WHERE ke=? AND auth=? AND uid=?',[d.ke,d.auth,d.uid],function(err,r) {
                 if(r&&r[0]){
@@ -3748,6 +3817,7 @@ var tx;
     })
     //functions for dispersing work to child servers;
     cn.on('c',function(d){
+        if(config.nativeEvaluation)return;
 //        if(!cn.ke&&d.socket_key===s.child_key){
             if(!cn.shinobi_child&&d.f=='init'){
                 cn.ip=cn.request.connection.remoteAddress;
@@ -3795,6 +3865,7 @@ var tx;
     })
     //embed functions
     cn.on('e', function (d) {
+        if(config.nativeEvaluation)return;
         tx=function(z){if(!z.ke){z.ke=cn.ke;};cn.emit('f',z);}
         switch(d.f){
             case'init':
@@ -3952,6 +4023,9 @@ s.auth=function(params,cb,res,req){
                             if(r&&r[0]){
                                 r=r[0];
                                 r.ip='0.0.0.0'
+                                r.details=JSON.parse(r.details || '{}');
+                                r.permissions={};
+                                r.lang=s.getLanguageFile(r.details.lang);
                                 s.api[params.auth]=r
                                 clearAfterTime()
                                 finish(r)
@@ -3992,6 +4066,7 @@ s.superAuth=function(x,callback){
 }
 ////Pages
 app.enable('trust proxy');
+if(config.nativeEvaluation)app.get('/libs/js/socket.io.js',function(req,res){res.sendFile(require.resolve('socket.io-client/dist/socket.io.js'))});
 app.use('/libs',express.static(__dirname + '/web/libs'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
@@ -5024,6 +5099,7 @@ app.get('/:auth/smonitor/:ke', function (req,res){
 });
 // Monitor Add,Edit,Delete
 app.all(['/:auth/configureMonitor/:ke/:id','/:auth/configureMonitor/:ke/:id/:f'], function (req,res){
+    if(config.nativeEvaluation)return res.status(403).send('Only generated fixtures are available in evaluation');
     req.ret={ok:false};
     res.setHeader('Content-Type', 'application/json');
     res.header("Access-Control-Allow-Origin",req.headers.origin);
@@ -5362,6 +5438,7 @@ app.get('/:auth/motion/:ke/:id', function (req,res){
 })
 //modify video file
 app.get(['/:auth/videos/:ke/:id/:file/:mode','/:auth/videos/:ke/:id/:file/:mode/:f'], function (req,res){
+    if(config.nativeEvaluation)return res.status(403).send('Recording mutation is unavailable in fixture evaluation');
     req.ret={ok:false};
     res.setHeader('Content-Type', 'application/json');
     res.header("Access-Control-Allow-Origin",req.headers.origin);
@@ -5492,6 +5569,7 @@ app.get([
 });
 //FFprobe by API
 app.get('/:auth/probe/:ke',function (req,res){
+    if(config.nativeEvaluation)return res.status(403).send('External probes are unavailable in evaluation');
     req.ret={ok:false};
     res.setHeader('Content-Type', 'application/json');
     res.header("Access-Control-Allow-Origin",req.headers.origin);
@@ -5520,7 +5598,7 @@ app.get('/:auth/probe/:ke',function (req,res){
                     }
                 }
                 req.probeCommand = s.splitForFFPMEG(req.query.flags+' -i '+req.query.url).join(' ')
-                exec('ffprobe '+req.probeCommand+' | echo ',function(err,stdout,stderr){
+                execFile(config.ffprobeDir || 'ffprobe',s.splitForFFPMEG(req.query.flags+' -i \"'+req.query.url+'\"'),{timeout:30000},function(err,stdout,stderr){
                     delete(user.ffprobe)
                     if(err){
                        req.ret.error=(err)
@@ -5537,6 +5615,7 @@ app.get('/:auth/probe/:ke',function (req,res){
 })
 try{
 s.cpuUsage=function(e){
+    if(config.nativeEvaluation){return e(0)}
     k={}
     switch(s.platform){
         case'win32':
@@ -5568,6 +5647,7 @@ s.cpuUsage=function(e){
     }
 }
 s.ramUsage=function(e){
+    if(config.nativeEvaluation){return e(100*os.freemem()/os.totalmem())}
     k={}
     switch(s.platform){
         case'win32':
@@ -5600,7 +5680,7 @@ s.ramUsage=function(e){
     },10000);
 }catch(err){s.systemLog(lang['CPU indicator will not work. Continuing...'])}
 //check disk space every 20 minutes
-if(config.autoDropCache===true){
+if(config.autoDropCache===true && process.platform==='linux'){
     setInterval(function(){
         exec('echo 3 > /proc/sys/vm/drop_caches',{detached: true})
     },60000*20);

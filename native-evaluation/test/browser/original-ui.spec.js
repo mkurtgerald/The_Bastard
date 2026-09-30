@@ -1,0 +1,43 @@
+'use strict';
+const {test,expect}=require('@playwright/test');
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),crypto=require('node:crypto');
+const {launch}=require('../../launcher');
+let instance,data,credentials;
+test.beforeAll(async()=>{data=fs.mkdtempSync(path.join(os.tmpdir(),'Bastard UI evaluation é '));credentials={mail:'browser-evaluation@localhost',password:crypto.randomBytes(24).toString('base64url')};instance=await launch({data,credentials,demo:true,port:19887});});
+test.afterAll(async()=>{if(instance)await instance.stop();if(data)fs.rmSync(data,{recursive:true,force:true});});
+test('original login, two live monitors, playback and interrupted navigation',async({page},testInfo)=>{
+ const faults=[];page.on('pageerror',error=>faults.push(error.message));
+ await page.goto(instance.url);
+ await expect(page.locator('#email')).toHaveValue('');await expect(page.locator('#pass')).toHaveValue('');
+ await page.locator('#email').fill(credentials.mail);await page.locator('#pass').fill(credentials.password);
+ await Promise.all([page.waitForNavigation(),page.locator('#login-submit').click()]);
+ await expect(page.locator('#main_header')).toBeVisible();
+ for(const mid of ['fixture1','fixture2']){
+  const tile=page.locator(`.monitor_block[mid="${mid}"]`);await expect(tile).toBeVisible({timeout:30000});
+  await tile.locator('[monitor="watch"]').click();
+  const live=page.locator(`.monitor_item[mid="${mid}"]`);await expect(live).toBeVisible();
+  await expect.poll(()=>live.locator('video').evaluate(video=>video.readyState>=2&&video.videoWidth>0),{timeout:30000}).toBe(true);
+ }
+ // Repeat Close/reopen on the original live controls.
+ await page.locator('.monitor_item[mid="fixture1"] [monitor="watch_off"]').click();
+ await expect(page.locator('.monitor_item[mid="fixture1"]')).toHaveCount(0);
+ await page.locator('.monitor_block[mid="fixture1"] [monitor="watch"]').click();
+ await expect(page.locator('.monitor_item[mid="fixture1"]')).toBeVisible();
+ await page.screenshot({path:testInfo.outputPath('original-two-camera-dashboard.png'),fullPage:true});
+ await testInfo.attach('Original two-camera dashboard',{path:testInfo.outputPath('original-two-camera-dashboard.png'),contentType:'image/png'});
+ // Original recording list and video-player modal, then Close and reopen.
+ const listButton=page.locator('.monitor_item[mid="fixture1"] [monitor="videos_table"]');await listButton.click();
+ await expect(page.locator('#videos_viewer')).toBeVisible();
+ await expect(page.locator('#videos_viewer [video="launch"]').first()).toBeVisible({timeout:30000});
+ await page.locator('#videos_viewer [video="launch"]').first().click();await expect(page.locator('#video_viewer')).toBeVisible();
+ await expect.poll(()=>page.locator('#video_viewer video').evaluate(video=>video.readyState>=2&&video.videoWidth>0),{timeout:30000}).toBe(true);
+ await page.screenshot({path:testInfo.outputPath('original-recording-playback.png'),fullPage:true});
+ await testInfo.attach('Original recording playback',{path:testInfo.outputPath('original-recording-playback.png'),contentType:'image/png'});
+ await page.locator('#video_viewer .modal-footer [data-dismiss="modal"]').click();await expect(page.locator('#video_viewer')).not.toBeVisible();
+ await page.locator('#videos_viewer .modal-header [data-dismiss="modal"]').click();await expect(page.locator('#videos_viewer')).not.toBeVisible();
+ // Open the preserved monitor editor, cancel, then open it again.
+ await page.locator('.monitor_block[mid="fixture1"] [monitor="edit"]').click();
+ await expect(page.locator('#add_monitor')).toBeVisible();
+ await page.locator('#add_monitor [data-dismiss="modal"]').first().click();await expect(page.locator('#add_monitor')).not.toBeVisible();
+ expect(faults).toEqual([]);
+});

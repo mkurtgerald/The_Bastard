@@ -1,0 +1,21 @@
+✔ fresh profile refuses silent/default account creation (16.413314ms)
+✔ user-chosen credentials persist without plaintext or silent replacement (7.981675ms)
+✔ short setup passwords are rejected (3.264517ms)
+✔ invalid ports are rejected before startup (1.053061ms)
+✔ storage counting includes nested fixtures (1.176769ms)
+✔ source retains original multi-monitor UI and removes embedded defaults (2.102029ms)
+✔ existing database without evaluation marker is rejected without adopting it (1.136059ms)
+✔ persisted custom output and foreign group are rejected before launch (589.711887ms)
+✔ imported integrations and API credentials are rejected (5.459869ms)
+✔ invalid existing fixtures are rejected before missing demo files are regenerated (394.871086ms)
+✔ linked runtime directories are rejected without touching their targets (188.011662ms)
+✔ first setup refuses a nonempty directory rather than adopting existing media (0.843139ms)
+✔ generated-only dependency set does not bundle the disabled motion native addon (1.431684ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1337.194088

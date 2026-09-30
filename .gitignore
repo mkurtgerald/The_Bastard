@@ -50,3 +50,19 @@ volumes
 
 # ─── Project Specific ────────────────────────────────
 src/yolov7_reid/src/models/mgn_R50-ibn.onnx
+
+# Native generated-fixture evaluation: never publish local runtime data or artifacts
+/native-evaluation/vendor/
+/native-evaluation/.eval-data/
+/native-evaluation/test-results/
+/native-evaluation/playwright-report/
+/test-results/
+/playwright-report/
+/native-evaluation/**/conf.json
+/native-evaluation/**/super.json
+/native-evaluation/**/*.sqlite
+/native-evaluation/**/evaluation-profile.json
+/native-evaluation/**/fixtures/
+/native-evaluation/**/videos/
+/native-evaluation/**/streams/
+/native-evaluation/**/fileBin/
