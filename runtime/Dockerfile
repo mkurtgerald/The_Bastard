@@ -2,6 +2,7 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV VMS_TEST_BIND=0.0.0.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 libgl1 ffmpeg \
