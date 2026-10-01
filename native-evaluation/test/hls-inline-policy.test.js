@@ -40,9 +40,9 @@ test('served evaluation Hls uses its inline demuxer with original asset and CSP 
  }
  assert.equal(fs.readFileSync(path.join(cameraRoot,'web/libs/js/hls.min.js'),'utf8'),original);
 });
-test('inline override is registered only in nativeEvaluation and before static serving',()=>{
- const source=fs.readFileSync(path.join(cameraRoot,'camera.js'),'utf8');
- const start=source.indexOf('if(config.nativeEvaluation){\n    // Keep the imported Hls bundle intact.');
+for(const [label,newline] of [['LF','\n'],['CRLF','\r\n']])test(`inline override is evaluation-only and before static serving with ${label}`,()=>{
+ const source=fs.readFileSync(path.join(cameraRoot,'camera.js'),'utf8').replace(/\r?\n/g,newline);
+ const start=source.search(/if\(config.nativeEvaluation\)\{\r?\n    \/\/ Keep the imported Hls bundle intact\./);
  assert.ok(start>0);const end=source.indexOf("app.use('/libs',express.static",start);assert.ok(end>start);
  const block=source.slice(start,end),routes=[];let reads=0;
  const context={config:{nativeEvaluation:false},__dirname:cameraRoot,fs:{readFileSync(filename,encoding){reads++;assert.equal(filename,cameraRoot+'/web/libs/js/hls.min.js');assert.equal(encoding,'utf8');return original;}},app:{get(route,handler){routes.push({route,handler});}}};
