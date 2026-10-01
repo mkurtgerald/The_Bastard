@@ -56,7 +56,7 @@ test('original login, two live monitors, playback and interrupted navigation',as
  }finally{await diagnostics.report('fixture1','recording',page.locator('#video_viewer video'));}
  await page.screenshot({path:testInfo.outputPath('original-recording-playback.png'),fullPage:true});
  await testInfo.attach('Original recording playback',{path:testInfo.outputPath('original-recording-playback.png'),contentType:'image/png'});
- await page.locator('#video_viewer .modal-footer [data-dismiss="modal"]').click();await expect(page.locator('#video_viewer')).not.toBeVisible();
+ await page.locator('#video_viewer .modal-footer').getByRole('button',{name:'Close',exact:true}).click();await expect(page.locator('#video_viewer')).not.toBeVisible();
  await page.locator('#videos_viewer .modal-header [data-dismiss="modal"]').click();await expect(page.locator('#videos_viewer')).not.toBeVisible();
  // Open the preserved monitor editor, cancel, then open it again.
  await page.locator('.monitor_block[mid="fixture1"] [monitor="edit"]').click();
