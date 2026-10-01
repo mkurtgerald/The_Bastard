@@ -1,5 +1,6 @@
 'use strict';
 const {test,expect}=require('@playwright/test');
+const {closePlaybackModal}=require('./playback-close');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),crypto=require('node:crypto');
 const {launch,openDb,all,closeDb}=require('../../launcher');
 const {attachMediaDiagnostics}=require('./media-diagnostics');
@@ -56,7 +57,7 @@ test('original login, two live monitors, playback and interrupted navigation',as
  }finally{await diagnostics.report('fixture1','recording',page.locator('#video_viewer video'));}
  await page.screenshot({path:testInfo.outputPath('original-recording-playback.png'),fullPage:true});
  await testInfo.attach('Original recording playback',{path:testInfo.outputPath('original-recording-playback.png'),contentType:'image/png'});
- await page.locator('#video_viewer .modal-footer').getByRole('button',{name:'Close',exact:true}).click();await expect(page.locator('#video_viewer')).not.toBeVisible();
+ await closePlaybackModal(page);
  await page.locator('#videos_viewer .modal-header [data-dismiss="modal"]').click();await expect(page.locator('#videos_viewer')).not.toBeVisible();
  // Open the preserved monitor editor, cancel, then open it again.
  await page.locator('.monitor_block[mid="fixture1"] [monitor="edit"]').click();
