@@ -1,0 +1,17 @@
+PASS: original login page served
+PASS: original dashboard rendered with monitor and playback controls
+PASS: authenticated watch stays in its own account group
+PASS: authenticated original dashboard default polling and WebSocket upgrade
+PASS: two generated monitors loaded
+PASS: fixture1 live playlist and media segment
+PASS: fixture2 live playlist and media segment
+PASS: fixture1 recorded clip plays through authenticated HTTP range endpoint
+PASS: fixture1 served recording frame decoded
+PASS: fixture2 recorded clip plays through authenticated HTTP range endpoint
+PASS: fixture2 served recording frame decoded
+PASS: two recorded feeds have distinct decoded image content
+PASS: stopping and restarting fixture1 leaves fixture2 live
+PASS: owned FFmpeg processes exited and unrelated FFmpeg survived
+PASS: restart retained monitors and recordings and resumed live stream
+PASS: 5 completed recording rows persisted
+PASS: original interface local evaluation smoke

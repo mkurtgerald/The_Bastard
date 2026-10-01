@@ -1,0 +1,107 @@
+name: Qualify Original UI Windows Evaluation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/original-ui-native-evaluation]
+
+concurrency:
+  group: original-ui-evaluation-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  generated-fixture-evaluation:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: native-evaluation/package-lock.json
+      - name: Install locked evaluation and test dependencies
+        working-directory: native-evaluation
+        run: npm ci --no-audit --no-fund
+      - name: Unit tests
+        working-directory: native-evaluation
+        shell: pwsh
+        run: |
+          $env:BASTARD_FFMPEG = node -p "require('ffmpeg-static')"
+          $env:BASTARD_FFPROBE = node -p "require('ffprobe-static').path"
+          npm test
+          if ($LASTEXITCODE -ne 0) { throw 'Unit tests failed' }
+      - name: Assemble portable Windows evaluation
+        working-directory: native-evaluation
+        run: npm run package:windows
+      - name: Compile unsigned per-user Windows installer
+        shell: pwsh
+        run: |
+          $iscc = 'C:/Program Files (x86)/Inno Setup 6/ISCC.exe'
+          if (-not (Test-Path $iscc)) { throw 'Hosted Inno Setup compiler is unavailable; no alternative installer was downloaded' }
+          & $iscc /Qp native-evaluation/tools/windows-installer.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+      - name: Install into isolated runner directory
+        shell: pwsh
+        run: |
+          $destination = Join-Path $env:RUNNER_TEMP 'The Bastard Installed Evaluation'
+          $setup = Start-Process -FilePath ./dist/TheBastard-OriginalUI-Evaluation-Setup.exe -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$destination`"") -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw 'Installer execution failed' }
+          "BASTARD_INSTALLED=$destination" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Verify installed desktop and Start menu shortcuts
+        shell: pwsh
+        run: |
+          $desktop = Join-Path ([Environment]::GetFolderPath('Desktop')) 'The Bastard Evaluation.lnk'
+          $start = Join-Path ([Environment]::GetFolderPath('Programs')) 'The Bastard Evaluation/Original UI Evaluation.lnk'
+          $shell = New-Object -ComObject WScript.Shell
+          $expected = [IO.Path]::GetFullPath((Join-Path $env:BASTARD_INSTALLED 'START-EVALUATION.cmd'))
+          foreach ($file in @($desktop,$start)) {
+            if (-not (Test-Path $file)) { throw 'Expected installed shortcut is missing' }
+            $link = $shell.CreateShortcut($file)
+            if ([IO.Path]::GetFullPath($link.TargetPath) -ne $expected) { throw 'Installed shortcut has an unexpected target' }
+          }
+      - name: Test installed launcher entry point
+        shell: pwsh
+        run: |
+          & "$env:BASTARD_INSTALLED/native-evaluation/vendor/node.exe" native-evaluation/tools/test-installed-entrypoint.js "$env:BASTARD_INSTALLED"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed entry-point acceptance failed' }
+      - name: Test installed original interface and process ownership
+        shell: pwsh
+        run: |
+          $pack = Join-Path $env:BASTARD_INSTALLED 'native-evaluation'
+          & "$pack/vendor/node.exe" --test "$pack/test/watch-directory.test.js"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed watcher path regression failed' }
+          & "$pack/vendor/node.exe" "$pack/smoke.js"
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled Windows smoke failed' }
+      - name: Install Chromium for repository browser acceptance
+        working-directory: native-evaluation
+        run: npx playwright install chromium
+      - name: Test original browser interface with generated media
+        shell: pwsh
+        run: |
+          $env:NODE_PATH = Join-Path $pwd 'native-evaluation/node_modules'
+          $pack = Join-Path $env:BASTARD_INSTALLED 'native-evaluation'
+          & "$pack/vendor/node.exe" "$pwd/native-evaluation/node_modules/@playwright/test/cli.js" test --config "$pack/playwright.config.js"
+          if ($LASTEXITCODE -ne 0) { throw 'Original browser interface acceptance failed' }
+      - name: Create evaluation archive
+        shell: pwsh
+        run: Compress-Archive -Path dist/TheBastard-OriginalUI-Evaluation/* -DestinationPath dist/OriginalUI-GeneratedFixture-Evaluation-Windows-x64.zip
+      - name: Upload qualified generated-fixture evaluation
+        uses: actions/upload-artifact@v4
+        with:
+          name: OriginalUI-GeneratedFixture-Evaluation-Windows-x64
+          path: |
+            dist/TheBastard-OriginalUI-Evaluation-Setup.exe
+            dist/OriginalUI-GeneratedFixture-Evaluation-Windows-x64.zip
+          retention-days: 7
+      - name: Upload generated-media screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: OriginalUI-Windows-generated-media-screenshots
+          path: test-results/**/*.png
+          if-no-files-found: ignore
+          retention-days: 7
