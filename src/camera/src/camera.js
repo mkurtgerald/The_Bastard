@@ -4070,6 +4070,12 @@ s.superAuth=function(x,callback){
 ////Pages
 app.enable('trust proxy');
 if(config.nativeEvaluation)app.get('/libs/js/socket.io.js',function(req,res){res.sendFile(require.resolve('socket.io-client/dist/socket.io.js'))});
+if(config.nativeEvaluation){
+    // Keep the imported Hls bundle intact. Its blob worker is blocked by the
+    // evaluation CSP, so select its supported inline demuxer for this mode only.
+    var evaluationHls=fs.readFileSync(__dirname+'/web/libs/js/hls.min.js','utf8')+'\n;window.Hls.DefaultConfig.enableWorker = false;\n';
+    app.get('/libs/js/hls.min.js',function(req,res){res.type('application/javascript').send(evaluationHls)});
+}
 app.use('/libs',express.static(__dirname + '/web/libs'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));

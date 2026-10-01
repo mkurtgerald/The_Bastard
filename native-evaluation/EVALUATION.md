@@ -2,6 +2,10 @@
 
 This launcher runs the existing `src/camera/src/camera.js` and its full multi-monitor `web` interface. The original import, applications, assets, and license notices remain in the repository. This does not use or replace the interface with `runtime/app.py`.
 
+The generated-fixture runtime serves the unchanged Hls 0.6.18 asset with an evaluation-only `enableWorker = false` configuration footer. This selects that library's built-in inline demuxer because its blob worker is blocked by the evaluation's unchanged Content Security Policy. The stored donor asset and UI templates are preserved; normal non-evaluation asset serving is unchanged. This is a compatibility adaptation, not permission to relax CSP or a claim that browser playback has passed qualification.
+
+Inline demuxing runs on the page's main thread instead of a worker. CPU work can therefore compete with UI responsiveness as stream count or resolution grows. The two small generated fixtures do not establish a capacity limit or maximum-efficiency result.
+
 ## Windows evaluation package
 
 Run **TheBastard-OriginalUI-Evaluation-Setup.exe** to install for your Windows user, then use the desktop or Start menu shortcut. No administrator access is required. The installer is unsigned; no signing identity is configured. Do not bypass a Windows security warning. The optional portable ZIP uses **START-EVALUATION.cmd** after extraction. Choose a disposable local login name and password in the terminal. Do not reuse a real password. Open the displayed address, normally `http://127.0.0.1:8787`, and sign in. The package contains Node, FFmpeg, ffprobe, SQLite and application dependencies. It does not install services, edit PATH, change security settings, or require Docker, WSL, a cloud account, or another vendor's executable.
