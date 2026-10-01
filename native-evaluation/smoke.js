@@ -3,6 +3,7 @@ const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),cryp
 const assert=require('node:assert/strict');
 const {spawn,execFileSync}=require('node:child_process');
 const {launch,binaries,openDb,all,closeDb}=require('./launcher');
+const {verifyRestartedRecordings}=require('./test/restarted-recordings');
 const nativeFetch=global.fetch;
 const fetch=(url,options={})=>nativeFetch(url,{...options,signal:AbortSignal.timeout(10000)});
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -46,12 +47,14 @@ async function main(){
     const segment=playlist.split('\n').find(line=>line.endsWith('.ts'));const segmentResponse=await fetch(endpoint(`/hls/${user.ke}/${mid}/${segment}`));assert.equal(segmentResponse.status,200);assert.ok((await segmentResponse.arrayBuffer()).byteLength>100);console.log(`PASS: ${mid} live playlist and media segment`);
    }
    const videos=await until(async()=>{const result=await (await fetch(endpoint('/videos/'+user.ke))).json();return ['fixture1','fixture2'].every(mid=>result.videos.some(v=>v.mid===mid&&v.status===1&&v.size>0))?result.videos:null},'both recorded clips',45000);
-   const decodedHashes=[];const originalClips=videos.filter(v=>v.status===1).map(v=>v.mid+':'+v.time);
+   const decodedHashes=[],recordedBeforeRestart=[];const originalClips=videos.filter(v=>v.status===1).map(v=>v.mid+':'+v.time);
    for(const mid of ['fixture1','fixture2']){
     const video=videos.find(v=>v.mid===mid&&v.status===1&&v.size>0);const response=await fetch(instance.url+video.href,{headers:{range:'bytes=0-1023'}});assert.equal(response.status,206);assert.ok((await response.arrayBuffer()).byteLength>0);assert.match(response.headers.get('content-type'),/mp4/);console.log(`PASS: ${mid} recorded clip plays through authenticated HTTP range endpoint`);
     const file=path.join(data,'videos',user.ke,mid,path.basename(video.href));const probe=JSON.parse(execFileSync(bin.ffprobe,['-v','error','-show_streams','-show_format','-of','json',file],{encoding:'utf8'}));assert.equal(probe.streams[0].codec_name,'h264');assert.ok(Number(probe.format.duration)>0);
     const served=await fetch(instance.url+video.href);assert.equal(served.status,200);const exported=path.join(data,mid+'-served.mp4');fs.writeFileSync(exported,Buffer.from(await served.arrayBuffer()));
-    const hash=execFileSync(bin.ffmpeg,['-hide_banner','-loglevel','error','-i',exported,'-frames:v','1','-f','hash','-hash','sha256','pipe:1'],{encoding:'utf8'}).trim();assert.match(hash,/SHA256=/);decodedHashes.push(hash);console.log(`PASS: ${mid} served recording frame decoded`);
+    const hash=execFileSync(bin.ffmpeg,['-hide_banner','-loglevel','error','-xerror','-i',exported,'-map','0:v:0','-f','hash','-hash','sha256','pipe:1'],{encoding:'utf8',timeout:15000}).trim();assert.match(hash,/^SHA256=[a-f0-9]{64}$/);decodedHashes.push(hash);
+    recordedBeforeRestart.push({mid:video.mid,time:video.time,ext:video.ext,sha256:crypto.createHash('sha256').update(fs.readFileSync(exported)).digest('hex'),decodedHash:hash});
+    console.log(`PASS: ${mid} complete served recording decoded`);
    }
    assert.notEqual(decodedHashes[0],decodedHashes[1]);console.log('PASS: two recorded feeds have distinct decoded image content');
    const playlist2=async()=>await (await fetch(endpoint(`/hls/${user.ke}/fixture2/s.m3u8`))).text();
@@ -65,6 +68,11 @@ async function main(){
    const owned=[...instance.ownedPids];assert.ok(owned.length>=2);await instance.stop();instance=null;await until(()=>owned.every(pid=>{try{process.kill(pid,0);return false}catch{return true}}),'owned FFmpeg exit',5000);assert.equal(sentinel.exitCode,null);console.log('PASS: owned FFmpeg processes exited and unrelated FFmpeg survived');
    instance=await launch(options);user=await signIn();const persisted=await (await fetch(endpoint('/monitor/'+user.ke))).json();assert.equal(persisted.length,2);
    const restored=await (await fetch(endpoint('/videos/'+user.ke))).json();assert.ok(restored.videos.length>=2);assert.ok(originalClips.every(key=>restored.videos.some(v=>v.mid+':'+v.time===key)));
+   await verifyRestartedRecordings(recordedBeforeRestart,restored.videos,{
+    readClip:async video=>{const response=await fetch(instance.url+video.href);assert.equal(response.status,200);assert.match(response.headers.get('content-type'),/mp4/);return Buffer.from(await response.arrayBuffer());},
+    decodeClip:async(bytes,video)=>{const exported=path.join(data,video.mid+'-restarted.mp4');fs.writeFileSync(exported,bytes);return execFileSync(bin.ffmpeg,['-hide_banner','-loglevel','error','-xerror','-i',exported,'-map','0:v:0','-f','hash','-hash','sha256','pipe:1'],{encoding:'utf8',timeout:15000}).trim();}
+   });
+   console.log('PASS: both pre-restart recordings retain identical file bytes and fully decoded content after authenticated retrieval');
    await until(async()=>{const r=await fetch(endpoint(`/hls/${user.ke}/fixture1/s.m3u8`));return r.ok&&(await r.text()).includes('#EXTINF')},'live stream after restart');console.log('PASS: restart retained monitors and recordings and resumed live stream');
    await instance.stop();instance=null;assert.equal(sentinel.exitCode,null);
    const db=await openDb(path.join(data,'shinobi.sqlite'));const rows=await all(db,'SELECT count(*) AS count FROM Videos WHERE status=1');await closeDb(db);console.log(`PASS: ${rows[0].count} completed recording rows persisted`);
