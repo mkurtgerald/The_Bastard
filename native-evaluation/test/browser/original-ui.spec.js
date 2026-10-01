@@ -1,10 +1,21 @@
 'use strict';
 const {test,expect}=require('@playwright/test');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),crypto=require('node:crypto');
-const {launch}=require('../../launcher');
+const {launch,openDb,all,closeDb}=require('../../launcher');
 const {attachMediaDiagnostics}=require('./media-diagnostics');
+const {waitForCompletedFixtureRecordings,hasOwnedFixtureRecording}=require('./recording-fixture-readiness');
 let instance,data,credentials;
-test.beforeAll(async()=>{data=fs.mkdtempSync(path.join(os.tmpdir(),'Bastard UI evaluation é '));credentials={mail:'browser-evaluation@localhost',password:crypto.randomBytes(24).toString('base64url')};instance=await launch({data,credentials,demo:true,port:19887});});
+test.beforeAll(async()=>{
+ data=fs.mkdtempSync(path.join(os.tmpdir(),'Bastard UI evaluation é '));credentials={mail:'browser-evaluation@localhost',password:crypto.randomBytes(24).toString('base64url')};instance=await launch({data,credentials,demo:true,port:19887});
+ await waitForCompletedFixtureRecordings(async()=>{
+  const db=await openDb(path.join(data,'shinobi.sqlite'));
+  try{
+   const rows=await all(db,'SELECT ke,mid,time,ext,status,size FROM Videos WHERE ke=?',[instance.user.ke]);
+   return rows.map(row=>({mid:row.mid,status:row.status,size:row.size,ownedFile:hasOwnedFixtureRecording(row,data,instance.user.ke)}));
+  }
+  finally{await closeDb(db);}
+ });
+});
 test.afterAll(async()=>{if(instance)await instance.stop();if(data)fs.rmSync(data,{recursive:true,force:true});});
 test('original login, two live monitors, playback and interrupted navigation',async({page},testInfo)=>{
  const diagnostics=await attachMediaDiagnostics(page,instance.url);
